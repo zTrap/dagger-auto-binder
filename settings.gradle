@@ -1,0 +1,2 @@
+include ':auto-binder-core', ':auto-binder-processor', ':sample'
+rootProject.name = 'auto-binder'

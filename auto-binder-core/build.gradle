@@ -1,0 +1,27 @@
+apply plugin: 'org.jetbrains.dokka'
+apply plugin: 'kotlin'
+
+dokka {
+    outputFormat = 'javadoc'
+    outputDirectory = "$buildDir/javadoc"
+    sourceDirs = files('src/main/kotlin')
+    packageOptions {
+        prefix = POM_ARTIFACT_ID
+    }
+}
+
+sourceSets {
+    main.java.setSrcDirs(Collections.singletonList('src/main/kotlin'))
+}
+
+apply from: '../publishing.gradle'
+
+compileKotlin {
+    kotlinOptions {
+        jvmTarget = setup.JavaVers
+    }
+}
+
+dependencies {
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+}
