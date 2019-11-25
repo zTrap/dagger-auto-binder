@@ -16,7 +16,7 @@ import javax.lang.model.type.DeclaredType
 import javax.lang.model.type.MirroredTypeException
 
 @Suppress("DEPRECATION")
-@IncrementalAnnotationProcessor(IncrementalAnnotationProcessorType.DYNAMIC)
+@IncrementalAnnotationProcessor(IncrementalAnnotationProcessorType.ISOLATING)
 @AutoService(Processor::class)
 class AutoBinderProcessor : AbstractProcessor() {
 
