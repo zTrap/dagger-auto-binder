@@ -1,6 +1,4 @@
 package ru.ztrap.tools.autobinder.core
 
-/**
- * @author pa.gulko zTrap (30.10.2019)
- */
+@Deprecated("This annotation only marker for default value. Do not use it!", level = DeprecationLevel.WARNING)
 annotation class Unscoped

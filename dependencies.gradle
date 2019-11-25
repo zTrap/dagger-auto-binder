@@ -1,19 +1,19 @@
 ext {
     setup = [
             JavaVers    : JavaVersion.VERSION_1_8,
-            version_name: "1.0.0",
-            version_code: 1_001_000_001,
-
+            version_name: "1.0.2",
+            version_code: 1_001_000_002,
             group       : "ru.ztrap.tools",
-
     ]
 
     versions = [
             appcompat  : "1.0.2",
-            auto       : "1.0-rc6",
-            auto_common: "0.10",
-            kotlinpoet : "1.4.3",
-            dagger     : "2.24",
-            incap      : "0.2"
+            auto      : [
+                    service: "1.0-rc6",
+                    common : "0.10",
+            ],
+            kotlinpoet: "1.4.4",
+            dagger    : "2.25.2",
+            incap     : "0.2"
     ]
 }

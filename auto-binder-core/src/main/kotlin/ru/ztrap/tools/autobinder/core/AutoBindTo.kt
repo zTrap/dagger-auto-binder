@@ -2,9 +2,7 @@ package ru.ztrap.tools.autobinder.core
 
 import kotlin.reflect.KClass
 
-/**
- * @author pa.gulko zTrap (30.10.2019)
- */
+@Suppress("DEPRECATION")
 @Target(AnnotationTarget.CLASS)
 @Retention(AnnotationRetention.RUNTIME)
 annotation class AutoBindTo(
