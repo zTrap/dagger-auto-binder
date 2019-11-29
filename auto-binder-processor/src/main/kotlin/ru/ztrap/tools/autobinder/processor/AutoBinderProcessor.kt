@@ -1,129 +1,169 @@
 package ru.ztrap.tools.autobinder.processor
 
-import com.google.auto.common.MoreElements
 import com.google.auto.service.AutoService
-import com.squareup.kotlinpoet.*
+import com.squareup.javapoet.JavaFile
 import net.ltgt.gradle.incap.IncrementalAnnotationProcessor
-import net.ltgt.gradle.incap.IncrementalAnnotationProcessorType
+import net.ltgt.gradle.incap.IncrementalAnnotationProcessorType.AGGREGATING
 import ru.ztrap.tools.autobinder.core.AutoBindTo
-import ru.ztrap.tools.autobinder.core.Unscoped
+import ru.ztrap.tools.autobinder.core.AutoBinderModule
+import ru.ztrap.tools.autobinder.processor.internal.MODULE
+import ru.ztrap.tools.autobinder.processor.internal.MirrorValue
+import ru.ztrap.tools.autobinder.processor.internal.applyEach
+import ru.ztrap.tools.autobinder.processor.internal.cast
+import ru.ztrap.tools.autobinder.processor.internal.castEach
+import ru.ztrap.tools.autobinder.processor.internal.findElementsAnnotatedWith
+import ru.ztrap.tools.autobinder.processor.internal.getAnnotation
+import ru.ztrap.tools.autobinder.processor.internal.getValue
+import ru.ztrap.tools.autobinder.processor.internal.hasAnnotation
+import ru.ztrap.tools.autobinder.processor.internal.toClassName
+import ru.ztrap.tools.autobinder.processor.internal.toTypeName
 import javax.annotation.processing.AbstractProcessor
+import javax.annotation.processing.Filer
+import javax.annotation.processing.Messager
+import javax.annotation.processing.ProcessingEnvironment
 import javax.annotation.processing.Processor
 import javax.annotation.processing.RoundEnvironment
 import javax.lang.model.SourceVersion
+import javax.lang.model.element.Element
+import javax.lang.model.element.Modifier
+import javax.lang.model.element.Name
 import javax.lang.model.element.TypeElement
-import javax.lang.model.type.DeclaredType
-import javax.lang.model.type.MirroredTypeException
+import javax.lang.model.util.Elements
+import javax.tools.Diagnostic
 
-@Suppress("DEPRECATION")
-@IncrementalAnnotationProcessor(IncrementalAnnotationProcessorType.ISOLATING)
+@IncrementalAnnotationProcessor(AGGREGATING)
 @AutoService(Processor::class)
 class AutoBinderProcessor : AbstractProcessor() {
 
-    companion object {
-        private const val MODULE_NAME = "AutoBinderModule"
-        private val ANNOTATION_CLASS = AutoBindTo::class.java
-        private val UNSCOPED_CLASS_NAME = Unscoped::class.asClassName()
-        private val MODULE_ANNOTATION = AnnotationSpec.builder(ClassName("dagger", "Module")).build()
-        private val BINDS_ANNOTATION = AnnotationSpec.builder(ClassName("dagger", "Binds")).build()
+    override fun getSupportedSourceVersion(): SourceVersion = SourceVersion.latest()
+
+    override fun getSupportedAnnotationTypes() = setOf(
+        AutoBinderModule::class.java.canonicalName,
+        AutoBindTo::class.java.canonicalName
+    )
+
+    override fun init(env: ProcessingEnvironment) {
+        super.init(env)
+        messager = env.messager
+        filer = env.filer
+        elements = env.elementUtils
     }
 
-    private val autoBinderModule = TypeSpec.classBuilder(MODULE_NAME)
-        .addModifiers(KModifier.ABSTRACT)
-        .addAnnotation(MODULE_ANNOTATION)
+    private lateinit var messager: Messager
+    private lateinit var filer: Filer
+    private lateinit var elements: Elements
 
-    override fun getSupportedSourceVersion(): SourceVersion = SourceVersion.latest()
-    override fun getSupportedAnnotationTypes(): Set<String> = setOf(ANNOTATION_CLASS.canonicalName)
+    private val unprocessedBindNames = mutableListOf<Name>()
+    private var userModule: String? = null
 
     override fun process(annotations: Set<TypeElement>, roundEnv: RoundEnvironment): Boolean {
-        val elements = roundEnv.getElementsAnnotatedWith(ANNOTATION_CLASS)
-            .map { it as TypeElement }
-            .map(::BindElement)
+        // Record factories as fully qualified names so they can safely be accessed in future
+        // processing rounds.
+        unprocessedBindNames += roundEnv.findElementsAnnotatedWith<AutoBindTo>()
+            .castEach<TypeElement>()
+            .map { it.qualifiedName }
 
-        if (elements.isEmpty()) return true
+        val autoBinderModuleElements = roundEnv.findAutoBinderModuleElementsOrNull()
+        if (autoBinderModuleElements != null) {
+            val moduleType = autoBinderModuleElements.moduleType
 
-        val packageName = elements.map { it.packageName }.commonPart
+            val userModuleFqcn = userModule
+            if (userModuleFqcn != null) {
+                val userModuleType = elements.getTypeElement(userModuleFqcn)
+                error("Multiple @AutoBinderModule-annotated modules found.", userModuleType)
+                error("Multiple @AutoBinderModule-annotated modules found.", moduleType)
+                userModule = null
+            } else {
+                userModule = moduleType.qualifiedName.toString()
 
-        elements.forEach(::writeToModule)
+                val autoBinderModuleGenerator = autoBinderModuleElements.toAutoBinderModuleGenerator(roundEnv)
+                writeAutoBinderModule(autoBinderModuleElements, autoBinderModuleGenerator)
+            }
+        }
 
-        FileSpec.builder(packageName, MODULE_NAME)
-            .addComment("Generated by AutoBinder (https://github.com/zTrap/Auto-binder)")
-            .addType(autoBinderModule.build())
+        // Wait until processing is ending to validate that the @AutoBinderModule's @Module annotation
+        // includes the generated type.
+        if (roundEnv.processingOver()) {
+            val userModuleFqcn = userModule
+            if (userModuleFqcn != null) {
+                // In the processing round in which we handle the @AutoBinderModule the @Module annotation's
+                // includes contain an <error> type because we haven't generated the AutoBinder module yet.
+                // As a result, we need to re-lookup the element so that its referenced types are available.
+                val userModule = elements.getTypeElement(userModuleFqcn)
+
+                // Previous validation guarantees this annotation is present.
+                val moduleAnnotation = userModule.getAnnotation(MODULE)!!
+                // Dagger guarantees this property is present and is an array of types or errors.
+                val includes = moduleAnnotation.getValue("includes", elements)!!
+                    .cast<MirrorValue.Array>()
+                    .filterIsInstance<MirrorValue.Type>()
+
+                val generatedModuleName = userModule.toClassName().autoBinderModuleName()
+                val referencesGeneratedModule = includes
+                    .map { it.toTypeName() }
+                    .any { it == generatedModuleName }
+                if (!referencesGeneratedModule) {
+                    error("@AutoBinderModule's @Module must include ${generatedModuleName.simpleName()}", userModule)
+                }
+            }
+        }
+
+        return false
+    }
+
+    private fun RoundEnvironment.findAutoBinderModuleElementsOrNull(): AutoBinderModuleElements? {
+        val autoBinderModules = findElementsAnnotatedWith<AutoBinderModule>().castEach<TypeElement>()
+        if (autoBinderModules.isEmpty()) {
+            return null
+        }
+        if (autoBinderModules.size > 1) {
+            autoBinderModules.forEach { error("Multiple @AutoBinderModule-annotated modules found.", it) }
+            return null
+        }
+
+        val autoBinderModule = autoBinderModules.single()
+        if (!autoBinderModule.hasAnnotation(MODULE)) {
+            error("@AutoBinderModule must also be annotated as a Dagger @Module", autoBinderModule)
+            return null
+        }
+
+        val factoryTypeElements = unprocessedBindNames.map(elements::getTypeElement)
+
+        return AutoBinderModuleElements(autoBinderModule, factoryTypeElements)
+    }
+
+    private fun AutoBinderModuleElements.toAutoBinderModuleGenerator(
+        roundEnvironment: RoundEnvironment
+    ): AutoBinderModuleGenerator {
+        val moduleName = moduleType.toClassName()
+        val public = Modifier.PUBLIC in moduleType.modifiers
+        return AutoBinderModuleGenerator(public, moduleName, roundEnvironment)
+    }
+
+    private fun writeAutoBinderModule(
+        elements: AutoBinderModuleElements,
+        moduleGenerator: AutoBinderModuleGenerator
+    ) {
+        val generatedTypeSpec = moduleGenerator.brewJava()
+            .toBuilder()
+            .addOriginatingElement(elements.moduleType)
+            .applyEach(elements.bindElements) {
+                addOriginatingElement(it)
+            }
             .build()
-            .writeTo(processingEnv.filer)
-        return true
+
+        JavaFile.builder(moduleGenerator.generatedType.packageName(), generatedTypeSpec)
+            .addFileComment("Generated by @AutoBinderModule. Do not modify!")
+            .build()
+            .writeTo(filer)
     }
 
-    private val List<String>.commonPart: String
-        get() {
-            val shortest = minBy { it.length }
-            if (!shortest.isNullOrEmpty()) {
-                var commonPart = ""
-
-                shortest.indices.forEach { index ->
-                    val symbol = shortest[index]
-                    if (all { it[index] == symbol }) {
-                        commonPart += symbol
-                    }
-                }
-
-                if (commonPart != shortest) {
-                    commonPart = commonPart.substringBeforeLast(".", "")
-                }
-
-                if (commonPart.isNotEmpty()) {
-                    return commonPart
-                }
-            }
-            return "inject.generated"
-        }
-
-    private fun writeToModule(bindElement: BindElement) {
-        autoBinderModule.addFunction(
-            FunSpec.builder("bind${bindElement.targetType.simpleName}To${bindElement.returnType.simpleName}")
-                .addModifiers(KModifier.ABSTRACT)
-                .addAnnotation(BINDS_ANNOTATION)
-                .addParameter(ParameterSpec.builder("binding", bindElement.targetType).build())
-                .returns(bindElement.returnType)
-                .also {
-                    if (bindElement.scopeName.isNotEmpty()) {
-                        val named = AnnotationSpec.builder(ClassName("javax.inject", "Named"))
-                            .addMember("value = %S", bindElement.scopeName)
-                            .build()
-                        it.addAnnotation(named)
-                    } else if (bindElement.scopeQualifier != UNSCOPED_CLASS_NAME) {
-                        val qualifier = AnnotationSpec.builder(bindElement.scopeQualifier).build()
-                        it.addAnnotation(qualifier)
-                    }
-                }
-                .build()
-        )
+    private fun error(message: String, element: Element? = null) {
+        messager.printMessage(Diagnostic.Kind.ERROR, message, element)
     }
 
-    private inner class BindElement(annotatedType: TypeElement) {
-        val packageName: String
-        val targetType: ClassName
-        val returnType: ClassName
-        val scopeName: String
-        val scopeQualifier: ClassName
-
-        init {
-            val annotation = annotatedType.getAnnotation(ANNOTATION_CLASS)
-            packageName = MoreElements.getPackage(annotatedType).qualifiedName.toString()
-            targetType = annotatedType.asClassName()
-            returnType = getClassName { annotation.value.asClassName() }
-            scopeName = annotation.scopeName
-            scopeQualifier = getClassName { annotation.scopeQualifier.asClassName() }
-        }
-
-        private fun getClassName(extractor: () -> ClassName): ClassName {
-            return try {
-                extractor()
-            } catch (e: MirroredTypeException) {
-                val classTypeMirror = e.typeMirror as DeclaredType
-                val classTypeElement = classTypeMirror.asElement() as TypeElement
-                classTypeElement.asClassName()
-            }
-        }
-    }
+    private data class AutoBinderModuleElements(
+        val moduleType: TypeElement,
+        val bindElements: List<TypeElement>
+    )
 }

@@ -27,7 +27,7 @@ dependencies {
     implementation project(":auto-binder-core")
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
     implementation "com.google.auto.service:auto-service:$versions.auto.service"
-    implementation "com.squareup:kotlinpoet:$versions.kotlinpoet"
+    implementation "com.squareup:javapoet:$versions.javapoet"
 
     implementation "com.google.auto:auto-common:$versions.auto.common"
 
