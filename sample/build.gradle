@@ -16,6 +16,5 @@ dependencies {
     implementation project(":auto-binder-core")
     kapt project(":auto-binder-processor")
 
-    implementation "com.google.dagger:dagger:$versions.dagger"
     kapt "com.google.dagger:dagger-compiler:$versions.dagger"
 }

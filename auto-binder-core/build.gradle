@@ -1,17 +1,17 @@
 apply plugin: 'org.jetbrains.dokka'
 apply plugin: 'kotlin'
 
+sourceSets {
+    main.java.setSrcDirs(['src/main/kotlin'])
+}
+
 dokka {
     outputFormat = 'javadoc'
     outputDirectory = "$buildDir/javadoc"
-    sourceDirs = files('src/main/kotlin')
+    sourceDirs = sourceSets.main.java.srcDirs
     packageOptions {
         prefix = POM_ARTIFACT_ID
     }
-}
-
-sourceSets {
-    main.java.setSrcDirs(Collections.singletonList('src/main/kotlin'))
 }
 
 apply from: '../publishing.gradle'
@@ -24,4 +24,5 @@ compileKotlin {
 
 dependencies {
     implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    api "com.google.dagger:dagger:$versions.dagger"
 }

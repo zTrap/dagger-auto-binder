@@ -10,5 +10,5 @@ interface Contract {
     }
 }
 
-@AutoBindTo(Contract.IPresenter::class)
+@AutoBindTo(Contract.IPresenter::class, type = AutoBindTo.Type.INTO_SET)
 class Presenter : Contract.IPresenter
