@@ -12,7 +12,7 @@ task cleanBuildInstall(type: GradleBuild) {
 
 task cleanBuildPublish(type: GradleBuild) {
     group = "publishing"
-    tasks = ['cleanBuildInstall', 'bintrayUpload']
+    tasks = ['clean', 'build', 'bintrayUpload']
 }
 
 task sourcesJar(type: Jar) {
