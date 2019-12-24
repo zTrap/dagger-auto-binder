@@ -1,28 +1,22 @@
 apply plugin: 'org.jetbrains.dokka'
-apply plugin: 'kotlin'
 
-sourceSets {
-    main.java.setSrcDirs(['src/main/kotlin'])
+ext {
+    pom_info.artifact.id = "$baseArtifactName-core"
+    pom_info.artifact.name = "Auto binder for Dagger 2"
+    pom_info.artifact.description = "Binding module generator for Dagger 2 Library https://github.com/google/dagger"
 }
 
 dokka {
-    outputFormat = 'javadoc'
+    outputFormat = "javadoc"
     outputDirectory = "$buildDir/javadoc"
-    sourceDirs = sourceSets.main.java.srcDirs
     packageOptions {
-        prefix = POM_ARTIFACT_ID
+        prefix = pom_info.artifact.id
     }
 }
 
-apply from: '../publishing.gradle'
-
-compileKotlin {
-    kotlinOptions {
-        jvmTarget = setup.JavaVers
-    }
-}
+apply from: "../publishing.gradle"
 
 dependencies {
-    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$kotlin_version"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$versions.kotlin"
     api "com.google.dagger:dagger:$versions.dagger"
 }

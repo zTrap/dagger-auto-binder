@@ -2,8 +2,8 @@ apply plugin: 'signing'
 apply plugin: 'maven'
 apply plugin: 'com.jfrog.bintray'
 
-group = GROUP
-version = VERSION_NAME
+group = pom_info.group
+version = pom_info.artifact.version
 
 task cleanBuildInstall(type: GradleBuild) {
     group = "publishing"
@@ -12,7 +12,7 @@ task cleanBuildInstall(type: GradleBuild) {
 
 task cleanBuildPublish(type: GradleBuild) {
     group = "publishing"
-    tasks = ['clean', 'build', 'bintrayUpload']
+    tasks = ['clean', 'build', 'install', 'bintrayUpload']
 }
 
 task sourcesJar(type: Jar) {
@@ -40,29 +40,29 @@ install {
     repositories.mavenInstaller {
         pom {
             project {
-                name POM_NAME
-                packaging POM_PACKAGING
-                description POM_DESCRIPTION
-                url POM_URL
+                name pom_info.artifact.name
+                packaging pom_info.packaging
+                description pom_info.artifact.description
+                url pom_info.repo.url
 
                 scm {
-                    url POM_SCM_URL
-                    connection POM_SCM_CONNECTION
-                    developerConnection POM_SCM_DEV_CONNECTION
+                    url pom_info.scm.url
+                    connection pom_info.scm.connection
+                    developerConnection pom_info.scm.dev_connection
                 }
 
                 licenses {
                     license {
-                        name POM_LICENCE_NAME
-                        url POM_LICENCE_URL
-                        distribution POM_LICENCE_DIST
+                        name pom_info.license.name
+                        url pom_info.license.url
+                        distribution pom_info.license.dist
                     }
                 }
 
                 developers {
                     developer {
-                        id POM_DEVELOPER_ID
-                        name POM_DEVELOPER_NAME
+                        id pom_info.developer.id
+                        name pom_info.developer.name
                     }
                 }
             }
@@ -79,13 +79,13 @@ bintray {
     publish = true
 
     pkg {
-        repo = REPO
-        name = POM_ARTIFACT_ID
-        vcsUrl = POM_VCS
+        repo = pom_info.repo.type
+        name = pom_info.artifact.id
+        vcsUrl = pom_info.repo.vcs
         publicDownloadNumbers = true
 
         version {
-            name = VERSION_NAME
+            name = pom_info.artifact.version
 
             gpg {
                 sign = true
