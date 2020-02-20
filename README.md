@@ -139,11 +139,11 @@ interface Interceptor {
 }
 
 @Named("first")
-@AutoBindTo(Interceptor::class, AutoBindTo.Type.INTO_MAP)
+@AutoBindTo(Interceptor::class, AutoBindTo.Type.INTO_SET)
 class FirstInterceptor : Interceptor
 
 @Named("second")
-@AutoBindTo(Interceptor::class, AutoBindTo.Type.INTO_MAP)
+@AutoBindTo(Interceptor::class, AutoBindTo.Type.INTO_SET)
 class SecondInterceptor : Interceptor
 ```
 
@@ -156,12 +156,12 @@ public abstract class AutoBinder_SampleModule {
   }
 
   @Binds
-  @IntoMap
+  @IntoSet
   @Named("first")
   abstract Interceptor bindFirstInterceptorToInterceptor(FirstInterceptor binding);
 
   @Binds
-  @IntoMap
+  @IntoSet
   @Named("second")
   abstract Interceptor bindSecondInterceptorToInterceptor(SecondInterceptor binding);
 }
