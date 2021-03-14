@@ -1,4 +1,4 @@
-# OBSOLETE. (Anvil)[https://github.com/square/anvil] provides better functionality. Try it out
+# OBSOLETE. [Anvil](https://github.com/square/anvil) provides better functionality. Try it out
 
 # Automatic binder for [Dagger 2](https://github.com/google/dagger)
 
